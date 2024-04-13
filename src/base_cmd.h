@@ -72,6 +72,7 @@ const std::string kCmdNameFlushdb = "flushdb";
 const std::string kCmdNameFlushall = "flushall";
 const std::string kCmdNameAuth = "auth";
 const std::string kCmdNameSelect = "select";
+const std::string kCmdNameShutdown = "shutdown";
 
 // hash cmd
 const std::string kCmdNameHSet = "hset";
