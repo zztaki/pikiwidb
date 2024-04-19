@@ -437,7 +437,7 @@ void PClient::OnConnect() {
     SetName("MasterConnection");
     SetFlag(kClientFlagMaster);
 
-    if (g_config.masterauth.empty()) {
+    if (g_config.master_auth.empty()) {
       SetAuth();
     }
   } else {

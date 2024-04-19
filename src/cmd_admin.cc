@@ -20,14 +20,27 @@ CmdConfigGet::CmdConfigGet(const std::string& name, int16_t arity)
 
 bool CmdConfigGet::DoInitial(PClient* client) { return true; }
 
-void CmdConfigGet::DoCmd(PClient* client) { client->AppendString("config cmd in development"); }
+void CmdConfigGet::DoCmd(PClient* client) {
+  std::vector<std::string> results;
+  for (int i = 0; i < client->argv_.size() - 2; i++) {
+    g_config.Get(client->argv_[i + 2], &results);
+  }
+  client->AppendStringVector(results);
+}
 
 CmdConfigSet::CmdConfigSet(const std::string& name, int16_t arity)
     : BaseCmd(name, arity, kCmdFlagsAdmin, kAclCategoryAdmin) {}
 
 bool CmdConfigSet::DoInitial(PClient* client) { return true; }
 
-void CmdConfigSet::DoCmd(PClient* client) { client->AppendString("config cmd in development"); }
+void CmdConfigSet::DoCmd(PClient* client) {
+  auto s = g_config.Set(client->argv_[2], client->argv_[3]);
+  if (!s.ok()) {
+    client->SetRes(CmdRes::kInvalidParameter);
+  } else {
+    client->SetRes(CmdRes::kOK);
+  }
+}
 
 FlushdbCmd::FlushdbCmd(const std::string& name, int16_t arity)
     : BaseCmd(name, arity, kCmdFlagsAdmin | kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryAdmin) {}
@@ -85,7 +98,7 @@ ShutdownCmd::ShutdownCmd(const std::string& name, int16_t arity)
 bool ShutdownCmd::DoInitial(PClient* client) {
   // For now, only shutdown need check local
   if (client->PeerIP().find("127.0.0.1") == std::string::npos &&
-      client->PeerIP().find(g_config.ip.c_str()) == std::string::npos) {
+      client->PeerIP().find(g_config.ip.ToString()) == std::string::npos) {
     client->SetRes(CmdRes::kErrOther, kCmdNameShutdown + " should be localhost");
     return false;
   }

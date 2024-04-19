@@ -20,20 +20,13 @@ PStore& PStore::Instance() {
 }
 
 void PStore::Init(int dbNum) {
-  if (g_config.backend == kBackEndNone) {
-    return;
-  }
-
   backends_.reserve(dbNum);
-
-  if (g_config.backend == kBackEndRocksDB) {
-    for (int i = 0; i < dbNum; i++) {
-      auto db = std::make_unique<DB>(i, g_config.dbpath);
-      backends_.push_back(std::move(db));
-    }
-  } else {
-    ERROR("unsupport backend!");
+  for (int i = 0; i < dbNum; i++) {
+    auto db = std::make_unique<DB>(i, g_config.db_path);
+    backends_.push_back(std::move(db));
+    INFO("Open DB_{} success!", i);
   }
+  INFO("STORE Init success!");
 }
 
 }  // namespace pikiwidb
