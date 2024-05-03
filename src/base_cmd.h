@@ -35,6 +35,8 @@ const std::string kCmdNameExpireat = "expireat";
 const std::string kCmdNamePExpireat = "pexpireat";
 const std::string kCmdNamePersist = "persist";
 const std::string kCmdNameKeys = "keys";
+const std::string kCmdNameRename = "rename";
+const std::string kCmdNameRenameNX = "renamenx";
 
 const std::string kCmdNamePttl = "pttl";
 // string cmd

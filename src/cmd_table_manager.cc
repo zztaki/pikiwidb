@@ -57,6 +57,8 @@ void CmdTableManager::InitCmdTable() {
   ADD_COMMAND(Pttl, 2);
   ADD_COMMAND(Persist, 2);
   ADD_COMMAND(Keys, 2);
+  ADD_COMMAND(Rename, 3);
+  ADD_COMMAND(RenameNX, 3);
 
   // kv
   ADD_COMMAND(Get, 2);
