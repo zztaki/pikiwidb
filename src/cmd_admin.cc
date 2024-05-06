@@ -6,12 +6,15 @@
  */
 
 #include "cmd_admin.h"
+#include "db.h"
 
 #include "braft/raft.h"
 #include "rocksdb/version.h"
 
 #include "pikiwidb.h"
 #include "praft/praft.h"
+#include "pstd/env.h"
+
 #include "store.h"
 
 namespace pikiwidb {
@@ -48,38 +51,78 @@ void CmdConfigSet::DoCmd(PClient* client) {
 }
 
 FlushdbCmd::FlushdbCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsAdmin | kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryAdmin) {}
+    : BaseCmd(name, arity, kCmdFlagsExclusive | kCmdFlagsAdmin | kCmdFlagsWrite,
+              kAclCategoryWrite | kAclCategoryAdmin) {}
 
 bool FlushdbCmd::DoInitial(PClient* client) { return true; }
 
 void FlushdbCmd::DoCmd(PClient* client) {
-  //  PSTORE.dirty_ += PSTORE.DBSize();
-  //  PSTORE.ClearCurrentDB();
-  //  Propagate(PSTORE.GetDB(), std::vector<PString>{"flushdb"});
-  client->AppendString("flushdb cmd in development");
+  int currentDBIndex = client->GetCurrentDB();
+  PSTORE.GetBackend(currentDBIndex).get()->Lock();
+  PSTORE.GetBackend(currentDBIndex)->GetStorage().reset();
+
+  std::string db_path = g_config.db_path.ToString() + std::to_string(currentDBIndex);
+  std::string path_temp = db_path;
+  path_temp.append("_deleting/");
+  pstd::RenameFile(db_path, path_temp);
+
+  PSTORE.GetBackend(currentDBIndex)->GetStorage() = std::make_unique<storage::Storage>();
+  storage::StorageOptions storage_options;
+  storage_options.options = g_config.GetRocksDBOptions();
+  auto cap = storage_options.db_instance_num * kColumnNum * storage_options.options.write_buffer_size *
+             storage_options.options.max_write_buffer_number;
+  storage_options.options.write_buffer_manager = std::make_shared<rocksdb::WriteBufferManager>(cap);
+
+  storage_options.table_options = g_config.GetRocksDBBlockBasedTableOptions();
+
+  storage_options.small_compaction_threshold = g_config.small_compaction_threshold.load();
+  storage_options.small_compaction_duration_threshold = g_config.small_compaction_duration_threshold.load();
+  storage_options.db_instance_num = g_config.db_instance_num;
+  storage_options.db_id = currentDBIndex;
+
+  storage::Status s = PSTORE.GetBackend(currentDBIndex)->GetStorage()->Open(storage_options, db_path.data());
+  assert(s.ok());
+  pstd::DeleteDir(path_temp);
+  PSTORE.GetBackend(currentDBIndex).get()->UnLock();
+  client->SetRes(CmdRes::kOK);
 }
 
 FlushallCmd::FlushallCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsAdmin | kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryAdmin) {}
+    : BaseCmd(name, arity, kCmdFlagsExclusive | kCmdFlagsAdmin | kCmdFlagsWrite,
+              kAclCategoryWrite | kAclCategoryAdmin) {}
 
 bool FlushallCmd::DoInitial(PClient* client) { return true; }
 
 void FlushallCmd::DoCmd(PClient* client) {
-  //  int currentDB = PSTORE.GetDB();
-  //  std::vector<PString> param{"flushall"};
-  //  DEFER {
-  //    PSTORE.SelectDB(currentDB);
-  //    Propagate(-1, param);
-  //    PSTORE.ResetDB();
-  //  };
-  //
-  //  for (int dbno = 0; true; ++dbno) {
-  //    if (PSTORE.SelectDB(dbno) == -1) {
-  //      break;
-  //    }
-  //    PSTORE.dirty_ += PSTORE.DBSize();
-  //  }
-  client->AppendString("flushall' cmd in development");
+  for (size_t i = 0; i < g_config.databases; ++i) {
+    PSTORE.GetBackend(i).get()->Lock();
+    PSTORE.GetBackend(i)->GetStorage().reset();
+
+    std::string db_path = g_config.db_path.ToString() + std::to_string(i);
+    std::string path_temp = db_path;
+    path_temp.append("_deleting/");
+    pstd::RenameFile(db_path, path_temp);
+
+    PSTORE.GetBackend(i)->GetStorage() = std::make_unique<storage::Storage>();
+    storage::StorageOptions storage_options;
+    storage_options.options = g_config.GetRocksDBOptions();
+    auto cap = storage_options.db_instance_num * kColumnNum * storage_options.options.write_buffer_size *
+               storage_options.options.max_write_buffer_number;
+    storage_options.options.write_buffer_manager = std::make_shared<rocksdb::WriteBufferManager>(cap);
+
+    storage_options.table_options = g_config.GetRocksDBBlockBasedTableOptions();
+
+    storage_options.small_compaction_threshold = g_config.small_compaction_threshold.load();
+    storage_options.small_compaction_duration_threshold = g_config.small_compaction_duration_threshold.load();
+    storage_options.db_instance_num = g_config.db_instance_num;
+    storage_options.db_id = static_cast<int>(i);
+
+    storage::Status s = PSTORE.GetBackend(i)->GetStorage()->Open(storage_options, db_path.data());
+    assert(s.ok());
+    pstd::DeleteDir(path_temp);
+    PSTORE.GetBackend(i).get()->UnLock();
+  }
+  client->SetRes(CmdRes::kOK);
 }
 
 SelectCmd::SelectCmd(const std::string& name, int16_t arity)
