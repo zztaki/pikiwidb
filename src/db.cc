@@ -16,16 +16,20 @@ extern pikiwidb::PConfig g_config;
 namespace pikiwidb {
 
 DB::DB(int db_index, const std::string& db_path)
-    : db_index_(db_index), db_path_(db_path + std::to_string(db_index_) + '/') {
+    : db_index_(db_index), db_path_(db_path + std::to_string(db_index_) + '/') {}
+
+rocksdb::Status DB::Open() {
   storage::StorageOptions storage_options;
   storage_options.options = g_config.GetRocksDBOptions();
-  storage_options.db_instance_num = g_config.db_instance_num.load();
-  storage_options.db_id = db_index_;
+  storage_options.table_options = g_config.GetRocksDBBlockBasedTableOptions();
 
-  // options for CF
   storage_options.options.ttl = g_config.rocksdb_ttl_second.load(std::memory_order_relaxed);
   storage_options.options.periodic_compaction_seconds =
       g_config.rocksdb_periodic_second.load(std::memory_order_relaxed);
+
+  storage_options.small_compaction_threshold = g_config.small_compaction_threshold.load();
+  storage_options.small_compaction_duration_threshold = g_config.small_compaction_duration_threshold.load();
+
   if (g_config.use_raft.load(std::memory_order_relaxed)) {
     storage_options.append_log_function = [&r = PRAFT](const Binlog& log, std::promise<rocksdb::Status>&& promise) {
       r.AppendLog(log, std::move(promise));
@@ -33,6 +37,10 @@ DB::DB(int db_index, const std::string& db_path)
     storage_options.do_snapshot_function =
         std::bind(&pikiwidb::PRaft::DoSnapshot, &pikiwidb::PRAFT, std::placeholders::_1, std::placeholders::_2);
   }
+
+  storage_options.db_instance_num = g_config.db_instance_num.load();
+  storage_options.db_id = db_index_;
+
   storage_ = std::make_unique<storage::Storage>();
 
   if (auto s = storage_->Open(storage_options, db_path_); !s.ok()) {
@@ -42,6 +50,7 @@ DB::DB(int db_index, const std::string& db_path)
 
   opened_ = true;
   INFO("Open DB{} success!", db_index_);
+  return rocksdb::Status::OK();
 }
 
 void DB::CreateCheckpoint(const std::string& checkpoint_path, bool sync) {
