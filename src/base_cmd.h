@@ -30,6 +30,7 @@ const std::string kCmdNameExists = "exists";
 const std::string kCmdNameType = "type";
 const std::string kCmdNameExpire = "expire";
 const std::string kCmdNameTtl = "ttl";
+const std::string kCmdNamePttl = "pttl";
 const std::string kCmdNamePExpire = "pexpire";
 const std::string kCmdNameExpireat = "expireat";
 const std::string kCmdNamePExpireat = "pexpireat";
@@ -38,7 +39,10 @@ const std::string kCmdNameKeys = "keys";
 const std::string kCmdNameRename = "rename";
 const std::string kCmdNameRenameNX = "renamenx";
 
-const std::string kCmdNamePttl = "pttl";
+// raft cmd
+const std::string kCmdNameRaftCluster = "raft.cluster";
+const std::string kCmdNameRaftNode = "raft.node";
+
 // string cmd
 const std::string kCmdNameSet = "set";
 const std::string kCmdNameGet = "get";
@@ -77,6 +81,7 @@ const std::string kCmdNameFlushall = "flushall";
 const std::string kCmdNameAuth = "auth";
 const std::string kCmdNameSelect = "select";
 const std::string kCmdNameShutdown = "shutdown";
+const std::string kCmdNameInfo = "info";
 
 // hash cmd
 const std::string kCmdNameHSet = "hset";
@@ -162,6 +167,7 @@ enum CmdFlags {
   kCmdFlagsModuleNoCluster = (1 << 13),  // No cluster mode support
   kCmdFlagsNoMulti = (1 << 14),          // Cannot be pipelined
   kCmdFlagsExclusive = (1 << 15),        // May change Storage pointer, like pika's kCmdFlagsSuspend
+  kCmdFlagsRaft = (1 << 16),             // raft
 };
 
 enum AclCategory {
@@ -185,7 +191,8 @@ enum AclCategory {
   kAclCategoryDangerous = (1 << 17),
   kAclCategoryConnection = (1 << 18),
   kAclCategoryTransaction = (1 << 19),
-  kAclCategoryScripting = (1 << 20)
+  kAclCategoryScripting = (1 << 20),
+  kAclCategoryRaft = (1 << 21),
 };
 
 /**
