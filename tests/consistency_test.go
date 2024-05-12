@@ -308,6 +308,43 @@ var _ = Describe("Consistency", Ordered, func() {
 		}
 	})
 
+	It("LSet Consistency Test", func() {
+		const testKey = "LSetConsistencyTestKey"
+		testValues := []string{"la", "lb", "lc", "ld"}
+		lpush, err := leader.LPush(ctx, testKey, testValues).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(lpush).To(Equal(int64(4)))
+
+		{
+			// LSet on leader
+			lSet, err := leader.LSet(ctx, testKey, 0, testValues[0]).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lSet).To(Equal(OK))
+
+			// LSet on leader
+			lSet, err = leader.LSet(ctx, testKey, 1, testValues[1]).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lSet).To(Equal(OK))
+
+			// LSet on leader
+			lSet, err = leader.LSet(ctx, testKey, -1, testValues[3]).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lSet).To(Equal(OK))
+
+			// LSet on leader
+			lSet, err = leader.LSet(ctx, testKey, -2, testValues[2]).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lSet).To(Equal(OK))
+
+			// read check
+			readChecker(func(c *redis.Client) {
+				lrange, err := c.LRange(ctx, testKey, 0, -1).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(lrange).To(Equal(testValues))
+			})
+		}
+	})
+
 	It("ZAdd Consistency Test", func() {
 		const testKey = "ZSetsConsistencyTestKey"
 		testData := []redis.Z{

@@ -622,6 +622,7 @@ Status Redis::LRem(const Slice& key, int64_t count, const Slice& value, uint64_t
 
 Status Redis::LSet(const Slice& key, int64_t index, const Slice& value) {
   uint32_t statistic = 0;
+  auto batch = Batch::CreateBatch(this);
   ScopeRecordLock l(lock_mgr_, key);
   std::string meta_value;
 
@@ -642,10 +643,10 @@ Status Redis::LSet(const Slice& key, int64_t index, const Slice& value) {
       }
       ListsDataKey lists_data_key(key, version, target_index);
       BaseDataValue i_val(value);
-      s = db_->Put(default_write_options_, handles_[kListsDataCF], lists_data_key.Encode(), i_val.Encode());
+      batch->Put(kListsDataCF, lists_data_key.Encode(), i_val.Encode());
       statistic++;
       UpdateSpecificKeyStatistics(DataType::kLists, key.ToString(), statistic);
-      return s;
+      return batch->Commit();
     }
   }
   return s;
