@@ -222,8 +222,38 @@ var _ = Describe("Consistency", Ordered, func() {
 		}
 	})
 
+	It("LPushx Consistency Test", func() {
+		const testKey = "LPushxConsistencyTestKey"
+		testValues := []string{"la", "lb", "lc", "ld"}
+
+		{
+			lpushx, err := leader.LPushX(ctx, testKey, testValues).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lpushx).To(Equal(int64(0)))
+
+			// lpush write on leader
+			lpush, err := leader.LPush(ctx, testKey, testValues[0]).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lpush).To(Equal(int64(1)))
+		}
+
+		{
+			// lpushx write on leader
+			lpushx, err := leader.LPushX(ctx, testKey, testValues[1:]).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lpushx).To(Equal(int64(len(testValues))))
+
+			// read check
+			readChecker(func(c *redis.Client) {
+				lrange, err := c.LRange(ctx, testKey, 0, -1).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(lrange).To(Equal(reverse(testValues)))
+			})
+		}
+	})
+
 	It("LInsert Consistency Test", func() {
-		const testKey = "ListsConsistencyTestKey"
+		const testKey = "LInsertConsistencyTestKey"
 		testValues := []string{"hello", "there", "world", "!"}
 		leader.LPush(ctx, testKey, testValues[2], testValues[0])
 

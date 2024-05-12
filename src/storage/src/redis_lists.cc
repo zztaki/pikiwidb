@@ -355,7 +355,7 @@ Status Redis::LPush(const Slice& key, const std::vector<std::string>& values, ui
 
 Status Redis::LPushx(const Slice& key, const std::vector<std::string>& values, uint64_t* len) {
   *len = 0;
-  rocksdb::WriteBatch batch;
+  auto batch = Batch::CreateBatch(this);
   ScopeRecordLock l(lock_mgr_, key);
 
   std::string meta_value;
@@ -376,11 +376,11 @@ Status Redis::LPushx(const Slice& key, const std::vector<std::string>& values, u
         parsed_lists_meta_value.ModifyLeftIndex(1);
         ListsDataKey lists_data_key(key, version, index);
         BaseDataValue i_val(value);
-        batch.Put(handles_[kListsDataCF], lists_data_key.Encode(), i_val.Encode());
+        batch->Put(kListsDataCF, lists_data_key.Encode(), i_val.Encode());
       }
-      batch.Put(handles_[kListsMetaCF], base_meta_key.Encode(), meta_value);
+      batch->Put(kListsMetaCF, base_meta_key.Encode(), meta_value);
       *len = parsed_lists_meta_value.Count();
-      return db_->Write(default_write_options_, &batch);
+      return batch->Commit();
     }
   }
   return s;
