@@ -139,7 +139,7 @@ Status Redis::LIndex(const Slice& key, int64_t index, std::string* element) {
 Status Redis::LInsert(const Slice& key, const BeforeOrAfter& before_or_after, const std::string& pivot,
                       const std::string& value, int64_t* ret) {
   *ret = 0;
-  rocksdb::WriteBatch batch;
+  auto batch = Batch::CreateBatch(this);
   ScopeRecordLock l(lock_mgr_, key);
   std::string meta_value;
 
@@ -198,7 +198,7 @@ Status Redis::LInsert(const Slice& key, const BeforeOrAfter& before_or_after, co
           for (const auto& node : list_nodes) {
             ListsDataKey lists_data_key(key, version, current_index++);
             BaseDataValue i_val(node);
-            batch.Put(handles_[kListsDataCF], lists_data_key.Encode(), i_val.Encode());
+            batch->Put(kListsDataCF, lists_data_key.Encode(), i_val.Encode());
           }
           parsed_lists_meta_value.ModifyLeftIndex(1);
         } else {
@@ -221,17 +221,17 @@ Status Redis::LInsert(const Slice& key, const BeforeOrAfter& before_or_after, co
           for (const auto& node : list_nodes) {
             ListsDataKey lists_data_key(key, version, current_index++);
             BaseDataValue i_val(node);
-            batch.Put(handles_[kListsDataCF], lists_data_key.Encode(), i_val.Encode());
+            batch->Put(kListsDataCF, lists_data_key.Encode(), i_val.Encode());
           }
           parsed_lists_meta_value.ModifyRightIndex(1);
         }
         parsed_lists_meta_value.ModifyCount(1);
-        batch.Put(handles_[kListsMetaCF], base_meta_key.Encode(), meta_value);
+        batch->Put(kListsMetaCF, base_meta_key.Encode(), meta_value);
         ListsDataKey lists_target_key(key, version, target_index);
         BaseDataValue i_val(value);
-        batch.Put(handles_[kListsDataCF], lists_target_key.Encode(), i_val.Encode());
+        batch->Put(kListsDataCF, lists_target_key.Encode(), i_val.Encode());
         *ret = static_cast<int32_t>(parsed_lists_meta_value.Count());
-        return db_->Write(default_write_options_, &batch);
+        return batch->Commit();
       }
     }
   } else if (s.IsNotFound()) {

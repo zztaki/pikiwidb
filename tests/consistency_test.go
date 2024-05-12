@@ -222,6 +222,40 @@ var _ = Describe("Consistency", Ordered, func() {
 		}
 	})
 
+	It("LInsert Consistency Test", func() {
+		const testKey = "ListsConsistencyTestKey"
+		testValues := []string{"hello", "there", "world", "!"}
+		leader.LPush(ctx, testKey, testValues[2], testValues[0])
+
+		{
+			// LInsert before write on leader
+			lInsert, err := leader.LInsert(ctx, testKey, "BEFORE", testValues[2], testValues[1]).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lInsert).To(Equal(int64(3)))
+
+			// read check
+			readChecker(func(c *redis.Client) {
+				lrange, err := c.LRange(ctx, testKey, 0, -1).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(lrange).To(Equal(testValues[0:3]))
+			})
+		}
+
+		{
+			// LInsert after write on leader
+			lInsert, err := leader.LInsert(ctx, testKey, "AFTER", testValues[2], testValues[3]).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lInsert).To(Equal(int64(4)))
+
+			// read check
+			readChecker(func(c *redis.Client) {
+				lrange, err := c.LRange(ctx, testKey, 0, -1).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(lrange).To(Equal(testValues))
+			})
+		}
+	})
+
 	It("ZAdd Consistency Test", func() {
 		const testKey = "ZSetsConsistencyTestKey"
 		testData := []redis.Z{
