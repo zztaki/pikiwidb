@@ -499,7 +499,7 @@ Status Redis::LRangeWithTTL(const Slice& key, int64_t start, int64_t stop, std::
 
 Status Redis::LRem(const Slice& key, int64_t count, const Slice& value, uint64_t* ret) {
   *ret = 0;
-  rocksdb::WriteBatch batch;
+  auto batch = Batch::CreateBatch(this);
   ScopeRecordLock l(lock_mgr_, key);
   std::string meta_value;
 
@@ -573,7 +573,7 @@ Status Redis::LRem(const Slice& key, int64_t count, const Slice& value, uint64_t
               rest--;
             } else {
               ListsDataKey lists_data_key(key, version, left--);
-              batch.Put(handles_[kListsDataCF], lists_data_key.Encode(), iter->value());
+              batch->Put(kListsDataCF, lists_data_key.Encode(), iter->value());
             }
           }
           delete iter;
@@ -594,7 +594,7 @@ Status Redis::LRem(const Slice& key, int64_t count, const Slice& value, uint64_t
               rest--;
             } else {
               ListsDataKey lists_data_key(key, version, right++);
-              batch.Put(handles_[kListsDataCF], lists_data_key.Encode(), iter->value());
+              batch->Put(kListsDataCF, lists_data_key.Encode(), iter->value());
             }
           }
           delete iter;
@@ -605,13 +605,13 @@ Status Redis::LRem(const Slice& key, int64_t count, const Slice& value, uint64_t
           parsed_lists_meta_value.ModifyRightIndex(-target_index.size());
         }
         parsed_lists_meta_value.ModifyCount(-target_index.size());
-        batch.Put(handles_[kListsMetaCF], base_meta_key.Encode(), meta_value);
+        batch->Put(kListsMetaCF, base_meta_key.Encode(), meta_value);
         for (const auto& idx : delete_index) {
           ListsDataKey lists_data_key(key, version, idx);
-          batch.Delete(handles_[kListsDataCF], lists_data_key.Encode());
+          batch->Delete(kListsDataCF, lists_data_key.Encode());
         }
         *ret = target_index.size();
-        return db_->Write(default_write_options_, &batch);
+        return batch->Commit();
       }
     }
   } else if (s.IsNotFound()) {

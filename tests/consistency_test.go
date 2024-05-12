@@ -286,6 +286,28 @@ var _ = Describe("Consistency", Ordered, func() {
 		}
 	})
 
+	It("LRem Consistency Test", func() {
+		const testKey = "LRemConsistencyTestKey"
+		testValues := []string{"la", "lb", "lc", "ld"}
+		lpush, err := leader.LPush(ctx, testKey, []string{testValues[0], testValues[1], testValues[0], testValues[0]}).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(lpush).To(Equal(int64(4)))
+
+		{
+			// LRem on leader
+			lRem, err := leader.LRem(ctx, testKey, -2, testValues[0]).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lRem).To(Equal(int64(2)))
+
+			// read check
+			readChecker(func(c *redis.Client) {
+				lrange, err := c.LRange(ctx, testKey, 0, -1).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(lrange).To(Equal([]string{testValues[0], testValues[1]}))
+			})
+		}
+	})
+
 	It("ZAdd Consistency Test", func() {
 		const testKey = "ZSetsConsistencyTestKey"
 		testData := []redis.Z{
