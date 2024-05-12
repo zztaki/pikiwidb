@@ -345,6 +345,28 @@ var _ = Describe("Consistency", Ordered, func() {
 		}
 	})
 
+	It("LTrim Consistency Test", func() {
+		const testKey = "LTrimConsistencyTestKey"
+		testValues := []string{"la", "lb", "lc", "ld"}
+		lpush, err := leader.LPush(ctx, testKey, testValues).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(lpush).To(Equal(int64(4)))
+
+		{
+			// LTrim on leader
+			lSet, err := leader.LTrim(ctx, testKey, 1, -1).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lSet).To(Equal(OK))
+
+			// read check
+			readChecker(func(c *redis.Client) {
+				lrange, err := c.LRange(ctx, testKey, 0, -1).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(lrange).To(Equal(reverse(testValues[0:3])))
+			})
+		}
+	})
+
 	It("ZAdd Consistency Test", func() {
 		const testKey = "ZSetsConsistencyTestKey"
 		testData := []redis.Z{
