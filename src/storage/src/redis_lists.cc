@@ -161,7 +161,7 @@ Status Redis::LInsert(const Slice& key, const BeforeOrAfter& before_or_after, co
       for (iter->Seek(start_data_key.Encode()); iter->Valid() && current_index < parsed_lists_meta_value.RightIndex();
            iter->Next(), current_index++) {
         ParsedBaseDataValue parsed_value(iter->value());
-        if (pivot.compare(parsed_value.UserValue().ToString()) == 0) {
+        if (pivot == parsed_value.UserValue().ToString()) {
           find_pivot = true;
           pivot_index = current_index;
           break;
