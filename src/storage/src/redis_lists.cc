@@ -139,7 +139,7 @@ Status Redis::LIndex(const Slice& key, int64_t index, std::string* element) {
 Status Redis::LInsert(const Slice& key, const BeforeOrAfter& before_or_after, const std::string& pivot,
                       const std::string& value, int64_t* ret) {
   *ret = 0;
-  rocksdb::WriteBatch batch;
+  auto batch = Batch::CreateBatch(this);
   ScopeRecordLock l(lock_mgr_, key);
   std::string meta_value;
 
@@ -161,7 +161,7 @@ Status Redis::LInsert(const Slice& key, const BeforeOrAfter& before_or_after, co
       for (iter->Seek(start_data_key.Encode()); iter->Valid() && current_index < parsed_lists_meta_value.RightIndex();
            iter->Next(), current_index++) {
         ParsedBaseDataValue parsed_value(iter->value());
-        if (pivot.compare(parsed_value.UserValue().ToString()) == 0) {
+        if (pivot == parsed_value.UserValue().ToString()) {
           find_pivot = true;
           pivot_index = current_index;
           break;
@@ -198,7 +198,7 @@ Status Redis::LInsert(const Slice& key, const BeforeOrAfter& before_or_after, co
           for (const auto& node : list_nodes) {
             ListsDataKey lists_data_key(key, version, current_index++);
             BaseDataValue i_val(node);
-            batch.Put(handles_[kListsDataCF], lists_data_key.Encode(), i_val.Encode());
+            batch->Put(kListsDataCF, lists_data_key.Encode(), i_val.Encode());
           }
           parsed_lists_meta_value.ModifyLeftIndex(1);
         } else {
@@ -221,17 +221,17 @@ Status Redis::LInsert(const Slice& key, const BeforeOrAfter& before_or_after, co
           for (const auto& node : list_nodes) {
             ListsDataKey lists_data_key(key, version, current_index++);
             BaseDataValue i_val(node);
-            batch.Put(handles_[kListsDataCF], lists_data_key.Encode(), i_val.Encode());
+            batch->Put(kListsDataCF, lists_data_key.Encode(), i_val.Encode());
           }
           parsed_lists_meta_value.ModifyRightIndex(1);
         }
         parsed_lists_meta_value.ModifyCount(1);
-        batch.Put(handles_[kListsMetaCF], base_meta_key.Encode(), meta_value);
+        batch->Put(kListsMetaCF, base_meta_key.Encode(), meta_value);
         ListsDataKey lists_target_key(key, version, target_index);
         BaseDataValue i_val(value);
-        batch.Put(handles_[kListsDataCF], lists_target_key.Encode(), i_val.Encode());
+        batch->Put(kListsDataCF, lists_target_key.Encode(), i_val.Encode());
         *ret = static_cast<int32_t>(parsed_lists_meta_value.Count());
-        return db_->Write(default_write_options_, &batch);
+        return batch->Commit();
       }
     }
   } else if (s.IsNotFound()) {
@@ -355,7 +355,7 @@ Status Redis::LPush(const Slice& key, const std::vector<std::string>& values, ui
 
 Status Redis::LPushx(const Slice& key, const std::vector<std::string>& values, uint64_t* len) {
   *len = 0;
-  rocksdb::WriteBatch batch;
+  auto batch = Batch::CreateBatch(this);
   ScopeRecordLock l(lock_mgr_, key);
 
   std::string meta_value;
@@ -376,11 +376,11 @@ Status Redis::LPushx(const Slice& key, const std::vector<std::string>& values, u
         parsed_lists_meta_value.ModifyLeftIndex(1);
         ListsDataKey lists_data_key(key, version, index);
         BaseDataValue i_val(value);
-        batch.Put(handles_[kListsDataCF], lists_data_key.Encode(), i_val.Encode());
+        batch->Put(kListsDataCF, lists_data_key.Encode(), i_val.Encode());
       }
-      batch.Put(handles_[kListsMetaCF], base_meta_key.Encode(), meta_value);
+      batch->Put(kListsMetaCF, base_meta_key.Encode(), meta_value);
       *len = parsed_lists_meta_value.Count();
-      return db_->Write(default_write_options_, &batch);
+      return batch->Commit();
     }
   }
   return s;
@@ -499,7 +499,7 @@ Status Redis::LRangeWithTTL(const Slice& key, int64_t start, int64_t stop, std::
 
 Status Redis::LRem(const Slice& key, int64_t count, const Slice& value, uint64_t* ret) {
   *ret = 0;
-  rocksdb::WriteBatch batch;
+  auto batch = Batch::CreateBatch(this);
   ScopeRecordLock l(lock_mgr_, key);
   std::string meta_value;
 
@@ -573,7 +573,7 @@ Status Redis::LRem(const Slice& key, int64_t count, const Slice& value, uint64_t
               rest--;
             } else {
               ListsDataKey lists_data_key(key, version, left--);
-              batch.Put(handles_[kListsDataCF], lists_data_key.Encode(), iter->value());
+              batch->Put(kListsDataCF, lists_data_key.Encode(), iter->value());
             }
           }
           delete iter;
@@ -594,7 +594,7 @@ Status Redis::LRem(const Slice& key, int64_t count, const Slice& value, uint64_t
               rest--;
             } else {
               ListsDataKey lists_data_key(key, version, right++);
-              batch.Put(handles_[kListsDataCF], lists_data_key.Encode(), iter->value());
+              batch->Put(kListsDataCF, lists_data_key.Encode(), iter->value());
             }
           }
           delete iter;
@@ -605,13 +605,13 @@ Status Redis::LRem(const Slice& key, int64_t count, const Slice& value, uint64_t
           parsed_lists_meta_value.ModifyRightIndex(-target_index.size());
         }
         parsed_lists_meta_value.ModifyCount(-target_index.size());
-        batch.Put(handles_[kListsMetaCF], base_meta_key.Encode(), meta_value);
+        batch->Put(kListsMetaCF, base_meta_key.Encode(), meta_value);
         for (const auto& idx : delete_index) {
           ListsDataKey lists_data_key(key, version, idx);
-          batch.Delete(handles_[kListsDataCF], lists_data_key.Encode());
+          batch->Delete(kListsDataCF, lists_data_key.Encode());
         }
         *ret = target_index.size();
-        return db_->Write(default_write_options_, &batch);
+        return batch->Commit();
       }
     }
   } else if (s.IsNotFound()) {
@@ -622,6 +622,7 @@ Status Redis::LRem(const Slice& key, int64_t count, const Slice& value, uint64_t
 
 Status Redis::LSet(const Slice& key, int64_t index, const Slice& value) {
   uint32_t statistic = 0;
+  auto batch = Batch::CreateBatch(this);
   ScopeRecordLock l(lock_mgr_, key);
   std::string meta_value;
 
@@ -642,17 +643,17 @@ Status Redis::LSet(const Slice& key, int64_t index, const Slice& value) {
       }
       ListsDataKey lists_data_key(key, version, target_index);
       BaseDataValue i_val(value);
-      s = db_->Put(default_write_options_, handles_[kListsDataCF], lists_data_key.Encode(), i_val.Encode());
+      batch->Put(kListsDataCF, lists_data_key.Encode(), i_val.Encode());
       statistic++;
       UpdateSpecificKeyStatistics(DataType::kLists, key.ToString(), statistic);
-      return s;
+      return batch->Commit();
     }
   }
   return s;
 }
 
 Status Redis::LTrim(const Slice& key, int64_t start, int64_t stop) {
-  rocksdb::WriteBatch batch;
+  auto batch = Batch::CreateBatch(this);
   ScopeRecordLock l(lock_mgr_, key);
 
   uint32_t statistic = 0;
@@ -676,7 +677,7 @@ Status Redis::LTrim(const Slice& key, int64_t start, int64_t stop) {
       if (sublist_left_index > sublist_right_index || sublist_left_index > origin_right_index ||
           sublist_right_index < origin_left_index) {
         parsed_lists_meta_value.InitialMetaValue();
-        batch.Put(handles_[kListsMetaCF], base_meta_key.Encode(), meta_value);
+        batch->Put(kListsMetaCF, base_meta_key.Encode(), meta_value);
       } else {
         if (sublist_left_index < origin_left_index) {
           sublist_left_index = origin_left_index;
@@ -691,25 +692,24 @@ Status Redis::LTrim(const Slice& key, int64_t start, int64_t stop) {
         parsed_lists_meta_value.ModifyLeftIndex(-(sublist_left_index - origin_left_index));
         parsed_lists_meta_value.ModifyRightIndex(-(origin_right_index - sublist_right_index));
         parsed_lists_meta_value.ModifyCount(-delete_node_num);
-        batch.Put(handles_[kListsMetaCF], base_meta_key.Encode(), meta_value);
+        batch->Put(kListsMetaCF, base_meta_key.Encode(), meta_value);
         for (uint64_t idx = origin_left_index; idx < sublist_left_index; ++idx) {
           statistic++;
           ListsDataKey lists_data_key(key, version, idx);
-          batch.Delete(handles_[kListsDataCF], lists_data_key.Encode());
+          batch->Delete(kListsDataCF, lists_data_key.Encode());
         }
         for (uint64_t idx = origin_right_index; idx > sublist_right_index; --idx) {
           statistic++;
           ListsDataKey lists_data_key(key, version, idx);
-          batch.Delete(handles_[kListsDataCF], lists_data_key.Encode());
+          batch->Delete(kListsDataCF, lists_data_key.Encode());
         }
       }
     }
   } else {
     return s;
   }
-  s = db_->Write(default_write_options_, &batch);
   UpdateSpecificKeyStatistics(DataType::kLists, key.ToString(), statistic);
-  return s;
+  return batch->Commit();
 }
 
 Status Redis::RPop(const Slice& key, int64_t count, std::vector<std::string>* elements) {
