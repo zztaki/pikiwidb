@@ -132,6 +132,7 @@ const std::string kCmdNameLSet = "lset";
 const std::string kCmdNameLInsert = "linsert";
 const std::string kCmdNameLIndex = "lindex";
 const std::string kCmdNameLLen = "llen";
+const std::string kCmdNameRPoplpush = "rpoplpush";
 
 // zset cmd
 const std::string kCmdNameZAdd = "zadd";
