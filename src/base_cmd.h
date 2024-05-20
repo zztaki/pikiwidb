@@ -76,11 +76,17 @@ const std::string kCmdNameDiscard = "discard";
 
 // admin
 const std::string kCmdNameConfig = "config";
+const std::string kSubCmdNameConfigGet = "get";
+const std::string kSubCmdNameConfigSet = "set";
 const std::string kCmdNameFlushdb = "flushdb";
 const std::string kCmdNameFlushall = "flushall";
 const std::string kCmdNameAuth = "auth";
 const std::string kCmdNameSelect = "select";
 const std::string kCmdNameShutdown = "shutdown";
+const std::string kCmdNameDebug = "debug";
+const std::string kSubCmdNameDebugHelp = "help";
+const std::string kSubCmdNameDebugOOM = "oom";
+const std::string kSubCmdNameDebugSegfault = "segfault";
 const std::string kCmdNameInfo = "info";
 
 // hash cmd
