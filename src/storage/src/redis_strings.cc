@@ -1194,6 +1194,54 @@ Status Redis::StringsTTL(const Slice& key, uint64_t* timestamp) {
   return s;
 }
 
+Status Redis::StringsRename(const Slice& key, Redis* new_inst, const Slice& newkey) {
+  std::string value;
+  Status s;
+  const std::vector<std::string> keys = {key.ToString(), newkey.ToString()};
+  MultiScopeRecordLock ml(lock_mgr_, keys);
+
+  BaseKey base_key(key);
+  BaseKey base_newkey(newkey);
+  s = db_->Get(default_read_options_, base_key.Encode(), &value);
+  if (s.ok()) {
+    ParsedStringsValue parsed_strings_value(&value);
+    if (parsed_strings_value.IsStale()) {
+      return Status::NotFound("Stale");
+    }
+    db_->Delete(default_write_options_, base_key.Encode());
+    s = new_inst->GetDB()->Put(default_write_options_, base_newkey.Encode(), value);
+  }
+  return s;
+}
+
+Status Redis::StringsRenamenx(const Slice& key, Redis* new_inst, const Slice& newkey) {
+  std::string value;
+  Status s;
+  const std::vector<std::string> keys = {key.ToString(), newkey.ToString()};
+  MultiScopeRecordLock ml(lock_mgr_, keys);
+
+  BaseKey base_key(key);
+  BaseKey base_newkey(newkey);
+  s = db_->Get(default_read_options_, base_key.Encode(), &value);
+  if (s.ok()) {
+    ParsedStringsValue parsed_strings_value(&value);
+    if (parsed_strings_value.IsStale()) {
+      return Status::NotFound("Stale");
+    }
+    // check if newkey exists.
+    s = new_inst->GetDB()->Get(default_read_options_, base_newkey.Encode(), &value);
+    if (s.ok()) {
+      ParsedStringsValue parsed_strings_value(&value);
+      if (!parsed_strings_value.IsStale()) {
+        return Status::Corruption();  // newkey already exists.
+      }
+    }
+    db_->Delete(default_write_options_, base_key.Encode());
+    s = new_inst->GetDB()->Put(default_write_options_, base_newkey.Encode(), value);
+  }
+  return s;
+}
+
 void Redis::ScanStrings() {
   rocksdb::ReadOptions iterator_options;
   const rocksdb::Snapshot* snapshot;

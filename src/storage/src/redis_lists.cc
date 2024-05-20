@@ -1085,6 +1085,75 @@ Status Redis::ListsTTL(const Slice& key, uint64_t* timestamp) {
   return s;
 }
 
+Status Redis::ListsRename(const Slice& key, Redis* new_inst, const Slice& newkey) {
+  std::string meta_value;
+  uint32_t statistic = 0;
+  const std::vector<std::string> keys = {key.ToString(), newkey.ToString()};
+  MultiScopeRecordLock ml(lock_mgr_, keys);
+
+  BaseMetaKey base_meta_key(key);
+  BaseMetaKey base_meta_newkey(newkey);
+  Status s = db_->Get(default_read_options_, handles_[kListsMetaCF], base_meta_key.Encode(), &meta_value);
+  if (s.ok()) {
+    ParsedListsMetaValue parsed_lists_meta_value(&meta_value);
+    if (parsed_lists_meta_value.IsStale()) {
+      return Status::NotFound("Stale");
+    } else if (parsed_lists_meta_value.Count() == 0) {
+      return Status::NotFound();
+    }
+    // copy a new list with newkey
+    statistic = parsed_lists_meta_value.Count();
+    s = new_inst->GetDB()->Put(default_write_options_, handles_[kListsMetaCF], base_meta_newkey.Encode(), meta_value);
+    new_inst->UpdateSpecificKeyStatistics(DataType::kLists, newkey.ToString(), statistic);
+
+    // ListsDel key
+    parsed_lists_meta_value.InitialMetaValue();
+    s = db_->Put(default_write_options_, handles_[kListsMetaCF], base_meta_key.Encode(), meta_value);
+    UpdateSpecificKeyStatistics(DataType::kLists, key.ToString(), statistic);
+  }
+  return s;
+}
+
+Status Redis::ListsRenamenx(const Slice& key, Redis* new_inst, const Slice& newkey) {
+  std::string meta_value;
+  uint32_t statistic = 0;
+  const std::vector<std::string> keys = {key.ToString(), newkey.ToString()};
+  MultiScopeRecordLock ml(lock_mgr_, keys);
+
+  BaseMetaKey base_meta_key(key);
+  BaseMetaKey base_meta_newkey(newkey);
+  Status s = db_->Get(default_read_options_, handles_[kListsMetaCF], base_meta_key.Encode(), &meta_value);
+  if (s.ok()) {
+    ParsedListsMetaValue parsed_lists_meta_value(&meta_value);
+    if (parsed_lists_meta_value.IsStale()) {
+      return Status::NotFound("Stale");
+    } else if (parsed_lists_meta_value.Count() == 0) {
+      return Status::NotFound();
+    }
+    // check if newkey exists.
+    std::string new_meta_value;
+    s = new_inst->GetDB()->Get(default_read_options_, handles_[kListsMetaCF], base_meta_newkey.Encode(),
+                               &new_meta_value);
+    if (s.ok()) {
+      ParsedSetsMetaValue parsed_lists_new_meta_value(&new_meta_value);
+      if (!parsed_lists_new_meta_value.IsStale() && parsed_lists_new_meta_value.Count() != 0) {
+        return Status::Corruption();  // newkey already exists.
+      }
+    }
+
+    // copy a new list with newkey
+    statistic = parsed_lists_meta_value.Count();
+    s = new_inst->GetDB()->Put(default_write_options_, handles_[kListsMetaCF], base_meta_newkey.Encode(), meta_value);
+    new_inst->UpdateSpecificKeyStatistics(DataType::kLists, newkey.ToString(), statistic);
+
+    // ListsDel key
+    parsed_lists_meta_value.InitialMetaValue();
+    s = db_->Put(default_write_options_, handles_[kListsMetaCF], base_meta_key.Encode(), meta_value);
+    UpdateSpecificKeyStatistics(DataType::kLists, key.ToString(), statistic);
+  }
+  return s;
+}
+
 void Redis::ScanLists() {
   rocksdb::ReadOptions iterator_options;
   const rocksdb::Snapshot* snapshot;
